@@ -1,0 +1,132 @@
+# Created by Peter Nagy - November, 2018
+AWSTemplateFormatVersion: 2010-09-09
+Description: CloudFormation template for spinning up a HA, self-healing single-master Jenkins cluster 
+
+Parameters: 
+  AllowedSSHRange:
+    AllowedPattern: '((\d{1,3})\.){3}\d{1,3}/\d{1,2}'
+    Default: 0.0.0.0/0
+    Description: Your allowed SSH IP range (eg 196.172.0.0/32)
+    Type: String
+  KeyPair:
+    Description: Keypair you will use to ssh in to jenkins nodes
+    Type: 'AWS::EC2::KeyPair::KeyName'
+
+Resources: 
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: '10.0.0.0/16'
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Stack
+          Value:
+            Ref: AWS::StackName
+
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.0.0/24
+      AvailabilityZone: !Join
+      - ''
+      - - !Ref 'AWS::Region'
+        - 'a'
+      Tags:
+      - Key: Name
+        Value: Private
+      - Key: Stack
+        Value:
+            Ref: AWS::StackName
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Join
+      - ''
+      - - !Ref 'AWS::Region'
+        - 'b'
+      Tags:
+      - Key: Name
+        Value: Public
+      - Key: Stack
+        Value:
+            Ref: AWS::StackName
+
+  SecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Rules to reach Jenkins UI & nodes
+      VpcId:
+        Ref: VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp:
+            Ref: AllowedSSHRange
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+        - Key: Stack
+          Value: 
+            Ref: AWS::StackName
+  
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: RouteTable
+      GatewayId: 
+        Ref: IGW
+      DestinationCidrBlock: 0.0.0.0/0
+
+  PublicSubnetAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: RouteTable
+      SubnetId:
+        Ref: PublicSubnet
+
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Stack
+          Value:
+            Ref: AWS::StackName
+  IGWAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: 
+      InternetGatewayId:
+        Ref: IGW
+      VpcId:
+        Ref: VPC
+
+Metadata: {}
+Mappings: {}
+Conditions: {}
+Outputs: {}
