@@ -36,6 +36,11 @@ Parameters:
       - true
     Description: Specifies whether detailed monitoring is enabled for the master instance.
 
+  MasterEBSVolumeSize:
+    Type: Number
+    Default: 8
+    Description: Specifies the EBS volume size of the master instance.
+
 Resources: 
   VPC:
     Type: AWS::EC2::VPC
@@ -173,6 +178,14 @@ Resources:
           !Sub |
             #!/bin/bash -ex
             yum update
+      BlockDeviceMappings: 
+        - 
+          DeviceName: /dev/xvda    
+          Ebs: 
+            VolumeType: gp2
+            VolumeSize:
+              Ref: MasterEBSVolumeSize
+         
       Tags:
         - Key: Name
           Value: Jenkins Master
