@@ -11,7 +11,6 @@ Parameters:
   KeyPair:
     Description: Keypair you will use to ssh in to jenkins nodes.
     Type: 'AWS::EC2::KeyPair::KeyName'
-    "AllowedPattern" : ".+"
   MasterInstanceType: 
     Type: String
     Default: t2.micro
@@ -41,6 +40,14 @@ Parameters:
     Type: Number
     Default: 8
     Description: Specifies the EBS volume size of the master instance.
+
+  MasterEFSEncrypted:
+    Type: String
+    Default: false
+    AllowedValues: 
+      - false
+      - true
+    Description: Encryption of the Master's EFS drive storing JENKINS_HOME.
 
 Resources: 
   VPC:
@@ -151,6 +158,18 @@ Resources:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
 
+  MountTargetSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId:
+        Ref: VPC
+      GroupDescription: Security group for mount target
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 2049
+        ToPort: 2049
+        CidrIp: 0.0.0.0/0
+
   JenkinsLaunchConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
@@ -166,36 +185,51 @@ Resources:
             VolumeType: gp2
             VolumeSize:
               Ref: MasterEBSVolumeSize
+      KeyName:
+        Ref: KeyPair
       AssociatePublicIpAddress: true 
       UserData:
         Fn::Base64:
-          !Sub |
-            #!/bin/bash -ex
-            sudo yum update -y
-            sudo yum install java-1.8.0 -y
-            sudo wget -O /etc/yum.repos.d/jenkins.repo http://pkg.jenkins-ci.org/redhat/jenkins.repo
-            sudo rpm --import https://jenkins-ci.org/redhat/jenkins-ci.org.key
-            sudo yum install jenkins -y
-            sudo service jenkins start
-  
+          Fn::Sub:
+            - |
+              #!/bin/bash -ex
+              sudo yum update -y
+              sudo yum install java-1.8.0 -y
+
+              echo "Java installed" > status.txt
+
+              mkdir -p /mnt/JENKINS_HOME
+              mount -t nfs4 -o nfsvers=4.1 $(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone).${DNS}:/ /mnt/JENKINS_HOME
+
+              echo "nfs4 mounted" >> status.txt
+
+              sudo wget -O /etc/yum.repos.d/jenkins.repo http://pkg.jenkins-ci.org/redhat/jenkins.repo
+              sudo rpm --import https://jenkins-ci.org/redhat/jenkins-ci.org.key
+              sudo yum install jenkins -y
+
+              echo "Jenkins installed" >> status.txt
+
+              sudo chown jenkins:jenkins /mnt/JENKINS_HOME
+              sudo sed -i 's/\/var\/lib\/jenkins/\/mnt\/JENKINS_HOME/g' /etc/sysconfig/jenkins
+              echo "$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone).${DNS}:/ /mnt/JENKINS_HOME nfsdefaults,vers=4.1 0 0" >> /etc/fstab
+              sudo service jenkins start
+              echo "Jenkins started" >> status.txt
+            - DNS: !Join [ '.', [ !Ref JenkinsEFS , 'efs', !Ref 'AWS::Region', 'amazonaws', 'com' ]]
+              Region: !Ref AWS::Region
   JenkinsAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn:
+      - MountTarget
     Properties:
       AvailabilityZones:
       - !Join
         - ''
         - - !Ref 'AWS::Region'
           - 'a'
-      - !Join
-        - ''
-        - - !Ref 'AWS::Region'
-          - 'b'
       LaunchConfigurationName:
         Ref: JenkinsLaunchConfig
       VPCZoneIdentifier:
         - Ref: PublicSubnetA
-        - Ref: PublicSubnetB
-
       MinSize: 1
       MaxSize: 1
       Tags:
@@ -206,6 +240,25 @@ Resources:
           Value: 
             Ref: AWS::StackName
           PropagateAtLaunch: true
+    
+  JenkinsEFS:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      Encrypted:
+        Ref: MasterEFSEncrypted
+      FileSystemTags:
+        - Key: Name
+          Value: Jenkins EFS
+  
+  MountTarget:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId:
+        Ref: JenkinsEFS
+      SubnetId:
+        Ref: PublicSubnetA
+      SecurityGroups:
+        - Ref: MountTargetSecurityGroup
 
   RouteTable:
     Type: AWS::EC2::RouteTable
