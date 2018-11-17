@@ -11,6 +11,7 @@ Parameters:
   KeyPair:
     Description: Keypair you will use to ssh in to jenkins nodes.
     Type: 'AWS::EC2::KeyPair::KeyName'
+    "AllowedPattern" : ".+"
   MasterInstanceType: 
     Type: String
     Default: t2.micro
@@ -71,7 +72,25 @@ Resources:
         Value:
             Ref: AWS::StackName
 
-  PublicSubnet:
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.2.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Join
+      - ''
+      - - !Ref 'AWS::Region'
+        - 'a'
+      Tags:
+      - Key: Name
+        Value: Public
+      - Key: Stack
+        Value:
+            Ref: AWS::StackName
+
+  PublicSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId:
@@ -88,8 +107,8 @@ Resources:
       - Key: Stack
         Value:
             Ref: AWS::StackName
-
-  SecGroup:
+  
+  JenkinsMasterSecGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Rules to reach Jenkins UI & nodes
@@ -99,6 +118,10 @@ Resources:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
           CidrIp: 0.0.0.0/0
         - IpProtocol: tcp
           FromPort: 443
@@ -112,6 +135,77 @@ Resources:
       SecurityGroupEgress:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
+
+  JenkinsSlaveSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Rules for worker nodes
+      VpcId:
+        Ref: VPC
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.0.0.0/24 
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+  JenkinsLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId:
+        Ref: MasterAMI
+      SecurityGroups: 
+        - Ref: JenkinsMasterSecGroup
+      InstanceType: 
+        Ref: MasterInstanceType
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda    
+          Ebs: 
+            VolumeType: gp2
+            VolumeSize:
+              Ref: MasterEBSVolumeSize
+      AssociatePublicIpAddress: true 
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -ex
+            sudo yum update -y
+            sudo yum install java-1.8.0 -y
+            sudo wget -O /etc/yum.repos.d/jenkins.repo http://pkg.jenkins-ci.org/redhat/jenkins.repo
+            sudo rpm --import https://jenkins-ci.org/redhat/jenkins-ci.org.key
+            sudo yum install jenkins -y
+            sudo service jenkins start
+  
+  JenkinsAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AvailabilityZones:
+      - !Join
+        - ''
+        - - !Ref 'AWS::Region'
+          - 'a'
+      - !Join
+        - ''
+        - - !Ref 'AWS::Region'
+          - 'b'
+      LaunchConfigurationName:
+        Ref: JenkinsLaunchConfig
+      VPCZoneIdentifier:
+        - Ref: PublicSubnetA
+        - Ref: PublicSubnetB
+
+      MinSize: 1
+      MaxSize: 1
+      Tags:
+        - Key: Name
+          Value: Jenkins Master
+          PropagateAtLaunch: true
+        - Key: Stack
+          Value: 
+            Ref: AWS::StackName
+          PropagateAtLaunch: true
 
   RouteTable:
     Type: AWS::EC2::RouteTable
@@ -132,13 +226,21 @@ Resources:
         Ref: IGW
       DestinationCidrBlock: 0.0.0.0/0
 
-  PublicSubnetAssociation:
+  PublicSubnetAAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId:
         Ref: RouteTable
       SubnetId:
-        Ref: PublicSubnet
+        Ref: PublicSubnetA
+
+  PublicSubnetBAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: RouteTable
+      SubnetId:
+        Ref: PublicSubnetB
 
   IGW:
     Type: AWS::EC2::InternetGateway
@@ -155,50 +257,9 @@ Resources:
       VpcId:
         Ref: VPC
 
-  MasterNode:
-    Type: AWS::EC2::Instance
-    Properties:
-      KeyName: 
-        Ref: KeyPair
-      ImageId: 
-        Ref: MasterAMI
-      InstanceType: 
-        Ref: MasterInstanceType
-      Monitoring:
-        Ref: MasterDetailedMonitoring
-      NetworkInterfaces: 
-        - AssociatePublicIpAddress: true
-          DeviceIndex: "0"
-          GroupSet: 
-            - Ref: SecGroup
-          SubnetId: 
-            Ref: PublicSubnet
-      UserData:
-        Fn::Base64:
-          !Sub |
-            #!/bin/bash -ex
-            yum update
-      BlockDeviceMappings: 
-        - 
-          DeviceName: /dev/xvda    
-          Ebs: 
-            VolumeType: gp2
-            VolumeSize:
-              Ref: MasterEBSVolumeSize
-         
-      Tags:
-        - Key: Name
-          Value: Jenkins Master
-        - Key: Stack
-          Value: 
-            Ref: AWS::StackName
 
 Metadata: {}
 Mappings: {}
 Conditions: {}
-Outputs:
-  MasterPublicIP:
-    Description : "Public IP address of the Master Jenkins node"
-    Value: 
-      Fn::GetAtt: MasterNode.PublicIp
+Outputs: {}
 
