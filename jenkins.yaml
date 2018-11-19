@@ -60,24 +60,7 @@ Resources:
       Tags:
         - Key: Stack
           Value:
-            Ref: AWS::StackName
-
-  PrivateSubnet:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId:
-        Ref: VPC
-      CidrBlock: 10.0.0.0/24
-      AvailabilityZone: !Join
-      - ''
-      - - !Ref 'AWS::Region'
-        - 'a'
-      Tags:
-      - Key: Name
-        Value: Private
-      - Key: Stack
-        Value:
-            Ref: AWS::StackName
+            Ref: AWS::StackName  
 
   PublicSubnetA:
     Type: AWS::EC2::Subnet
@@ -114,6 +97,40 @@ Resources:
       - Key: Stack
         Value:
             Ref: AWS::StackName
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Join
+      - ''
+      - - !Ref 'AWS::Region'
+        - 'a'
+      Tags:
+      - Key: Name
+        Value: Private
+      - Key: Stack
+        Value:
+            Ref: AWS::StackName
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.4.0/24
+      AvailabilityZone: !Join
+      - ''
+      - - !Ref 'AWS::Region'
+        - 'b'
+      Tags:
+      - Key: Name
+        Value: Private
+      - Key: Stack
+        Value:
+            Ref: AWS::StackName    
   
   JenkinsMasterSecGroup:
     Type: AWS::EC2::SecurityGroup
@@ -164,11 +181,20 @@ Resources:
       VpcId:
         Ref: VPC
       GroupDescription: Security group for mount target
-      SecurityGroupIngress:
-      - IpProtocol: tcp
-        FromPort: 2049
-        ToPort: 2049
-        CidrIp: 0.0.0.0/0
+  InboundRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: tcp
+      FromPort: 2049
+      ToPort: 2049
+      SourceSecurityGroupId:
+        Fn::GetAtt:
+        - JenkinsMasterSecGroup
+        - GroupId
+      GroupId:
+        Fn::GetAtt:
+        - MountTargetSecurityGroup
+        - GroupId
 
   JenkinsLaunchConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
@@ -219,17 +245,23 @@ Resources:
   JenkinsAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     DependsOn:
-      - MountTarget
+      - MountTargetA
+      - MountTargetB
     Properties:
       AvailabilityZones:
       - !Join
         - ''
         - - !Ref 'AWS::Region'
           - 'a'
+      - !Join
+        - ''
+        - - !Ref 'AWS::Region'
+          - 'b'
       LaunchConfigurationName:
         Ref: JenkinsLaunchConfig
       VPCZoneIdentifier:
         - Ref: PublicSubnetA
+        - Ref: PublicSubnetB
       MinSize: 1
       MaxSize: 1
       Tags:
@@ -250,13 +282,23 @@ Resources:
         - Key: Name
           Value: Jenkins EFS
   
-  MountTarget:
+  MountTargetA:
     Type: AWS::EFS::MountTarget
     Properties:
       FileSystemId:
         Ref: JenkinsEFS
       SubnetId:
-        Ref: PublicSubnetA
+        Ref: PrivateSubnetA
+      SecurityGroups:
+        - Ref: MountTargetSecurityGroup
+  
+  MountTargetB:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId:
+        Ref: JenkinsEFS
+      SubnetId:
+        Ref: PrivateSubnetB
       SecurityGroups:
         - Ref: MountTargetSecurityGroup
 
