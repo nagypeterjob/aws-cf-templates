@@ -135,7 +135,7 @@ Resources:
   JenkinsMasterSecGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Rules to reach Jenkins UI & nodes
+      GroupDescription: Rules that controls traffic to Jenkins UI & nodes
       VpcId:
         Ref: VPC
       SecurityGroupIngress:
@@ -166,22 +166,30 @@ Resources:
       GroupDescription: Rules for worker nodes
       VpcId:
         Ref: VPC
-      SecurityGroupIngress: 
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 10.0.0.0/24 
-      SecurityGroupEgress:
-        - IpProtocol: -1
-          CidrIp: 0.0.0.0/0
+  
+  JenkinsSlaveInboundRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      SourceSecurityGroupId:
+        Fn::GetAtt:
+        - JenkinsMasterSecGroup
+        - GroupId
+      GroupId:
+        Fn::GetAtt:
+        - JenkinsSlaveSecGroup
+        - GroupId
 
   MountTargetSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
+      GroupDescription: Security group for mount target
       VpcId:
         Ref: VPC
-      GroupDescription: Security group for mount target
-  InboundRule:
+
+  MountTargetInboundRule:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
       IpProtocol: tcp
@@ -242,6 +250,7 @@ Resources:
               echo "Jenkins started" >> status.txt
             - DNS: !Join [ '.', [ !Ref JenkinsEFS , 'efs', !Ref 'AWS::Region', 'amazonaws', 'com' ]]
               Region: !Ref AWS::Region
+  
   JenkinsAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     DependsOn:
@@ -344,6 +353,7 @@ Resources:
         - Key: Stack
           Value:
             Ref: AWS::StackName
+
   IGWAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties: 
