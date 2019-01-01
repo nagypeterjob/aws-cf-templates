@@ -14,16 +14,16 @@ CloudFormation template for spinning up a HA, self-healing single-master Jenkins
 You need to have a keypair created in the given region
 
 ### Inputs
-- AllowedSSHRange: Ideally, your allowed SSH IP range (eg 196.172.0.0/32).
-- KeyPair: The pre-created Keypair you will use to ssh in to the Jenkins master.
-- MasterInstanceType: Instance type for the master node (according to AWS, m4.large is the best value/performance choice).
-- MasterAMI: Instance AMI for the master node (default one is free tier eligible).
-- MasterDetailedMonitoring: Specifies whether detailed monitoring is enabled for the master instance.
-- MasterEBSVolumeSize: Specifies the EBS volume size of the master instance.
-- MasterEFSEncrypted: Encryption of the Master's EFS drive storing JENKINS_HOME.
+- **AllowedSSHRange:** Ideally, your allowed SSH IP range (eg 196.172.0.0/32).
+- **KeyPair:** The pre-created Keypair you will use to ssh in to the Jenkins master.
+- **MasterInstanceType:** Instance type for the master node (according to AWS, m4.large is the best value/performance choice).
+- **MasterAMI:** Instance AMI for the master node (default one is free tier eligible).
+- **MasterDetailedMonitoring:** Specifies whether detailed monitoring is enabled for the master instance.
+- **MasterEBSVolumeSize:** Specifies the EBS volume size of the master instance.
+- **MasterEFSEncrypted:** Encryption of the Master's EFS drive storing JENKINS_HOME.
 
 ### Outputs
-- LoadBalancerDNSName: The DNS name of the ALB
+- **LoadBalancerDNSName**: The DNS name of the ALB
 
 ### How to get started
 1. Create the stack on AWS
@@ -37,7 +37,7 @@ You need to have a keypair created in the given region
 - If you will use the master instance(s) for a long time, buy reserved instances to save money on the long run.
 
 ### Possible improvements
-These improvements vastly depend on the given use-case / policies / previous setups:
+These improvements vastly depends on the given use-case / policies / previous setups:
 - Logging
 - EFS backup to S3
 - Better ALB tweaks
