@@ -50,6 +50,9 @@ Parameters:
     Description: Encryption of the Master's EFS drive storing JENKINS_HOME.
 
 Resources: 
+
+  #---------- VPC ----------
+  
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -131,7 +134,60 @@ Resources:
       - Key: Stack
         Value:
             Ref: AWS::StackName    
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+        - Key: Stack
+          Value: 
+            Ref: AWS::StackName
   
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: RouteTable
+      GatewayId: 
+        Ref: IGW
+      DestinationCidrBlock: 0.0.0.0/0
+
+  PublicSubnetAAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: RouteTable
+      SubnetId:
+        Ref: PublicSubnetA
+
+  PublicSubnetBAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: RouteTable
+      SubnetId:
+        Ref: PublicSubnetB
+
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Stack
+          Value:
+            Ref: AWS::StackName
+
+  IGWAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: 
+      InternetGatewayId:
+        Ref: IGW
+      VpcId:
+        Ref: VPC
+  
+  #---------- Security Groups ----------
+
   JenkinsMasterSecGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -140,18 +196,6 @@ Resources:
         Ref: VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 8080
-          ToPort: 8080
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
           CidrIp:
@@ -159,6 +203,48 @@ Resources:
       SecurityGroupEgress:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
+  JenkinsMasterInboundRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      SourceSecurityGroupId:
+        Fn::GetAtt:
+        - ALBSecGroup
+        - GroupId
+      GroupId:
+        Fn::GetAtt:
+        - JenkinsMasterSecGroup
+        - GroupId
+  JenkinsMasterInboundRule2:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      SourceSecurityGroupId:
+        Fn::GetAtt:
+        - ALBSecGroup
+        - GroupId
+      GroupId:
+        Fn::GetAtt:
+        - JenkinsMasterSecGroup
+        - GroupId
+  JenkinsMasterInboundRule3:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId:
+        Fn::GetAtt:
+        - ALBSecGroup
+        - GroupId
+      GroupId:
+        Fn::GetAtt:
+        - JenkinsMasterSecGroup
+        - GroupId
 
   JenkinsSlaveSecGroup:
     Type: AWS::EC2::SecurityGroup
@@ -166,7 +252,6 @@ Resources:
       GroupDescription: Rules for worker nodes
       VpcId:
         Ref: VPC
-  
   JenkinsSlaveInboundRule:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
@@ -188,7 +273,6 @@ Resources:
       GroupDescription: Security group for mount target
       VpcId:
         Ref: VPC
-
   MountTargetInboundRule:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
@@ -203,6 +287,27 @@ Resources:
         Fn::GetAtt:
         - MountTargetSecurityGroup
         - GroupId
+
+  ALBSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Rules that controls allowed ALB traffic
+      VpcId:
+        Ref: VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+  #---------- Auto Scaling ----------
 
   JenkinsLaunchConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
@@ -273,6 +378,10 @@ Resources:
         - Ref: PublicSubnetB
       MinSize: 1
       MaxSize: 1
+      TargetGroupARNs:
+        - Ref: ALBTargetGroup
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 300
       Tags:
         - Key: Name
           Value: Jenkins Master
@@ -281,7 +390,9 @@ Resources:
           Value: 
             Ref: AWS::StackName
           PropagateAtLaunch: true
-    
+  
+#---------- EFS ----------
+
   JenkinsEFS:
     Type: AWS::EFS::FileSystem
     Properties:
@@ -311,60 +422,71 @@ Resources:
       SecurityGroups:
         - Ref: MountTargetSecurityGroup
 
-  RouteTable:
-    Type: AWS::EC2::RouteTable
+#---------- Application Load Balancer ----------
+
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      VpcId:
-        Ref: VPC
+      Scheme: internet-facing
+      Subnets: 
+        - Ref: PublicSubnetA
+        - Ref: PublicSubnetB
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: 50
+      SecurityGroups:
+        - Ref: ALBSecGroup
       Tags:
+        - Key: Name
+          Value: Jenkins ALB
         - Key: Stack
           Value: 
             Ref: AWS::StackName
-  
-  PublicRoute:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId:
-        Ref: RouteTable
-      GatewayId: 
-        Ref: IGW
-      DestinationCidrBlock: 0.0.0.0/0
 
-  PublicSubnetAAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      RouteTableId:
-        Ref: RouteTable
-      SubnetId:
-        Ref: PublicSubnetA
-
-  PublicSubnetBAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId:
-        Ref: RouteTable
-      SubnetId:
-        Ref: PublicSubnetB
-
-  IGW:
-    Type: AWS::EC2::InternetGateway
-    Properties:
-      Tags:
-        - Key: Stack
-          Value:
-            Ref: AWS::StackName
-
-  IGWAttachment:
-    Type: AWS::EC2::VPCGatewayAttachment
-    Properties: 
-      InternetGatewayId:
-        Ref: IGW
+      HealthCheckIntervalSeconds: 30
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 4
+      HealthCheckPath: '/robots.txt'
+      Matcher:
+        HttpCode: 200
+      Name: Jenkins
+      Port: 8080
+      Protocol: HTTP
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 20
+      UnhealthyThresholdCount: 3
       VpcId:
         Ref: VPC
+      Tags:
+      - Key: Name
+        Value: Jenkins TargetGroup
+      - Key: Stack
+        Value: 
+          Ref: AWS::StackName
+    
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn:
+            Ref: ALBTargetGroup
+      LoadBalancerArn:
+        Ref: ALB
+      Port: 80
+      Protocol: HTTP
 
+Outputs:
+  LoadBalancerDNSName:
+    Description: The DNSName of the ALB
+    Value: !GetAtt ALB.DNSName
 
 Metadata: {}
 Mappings: {}
 Conditions: {}
-Outputs: {}
 
