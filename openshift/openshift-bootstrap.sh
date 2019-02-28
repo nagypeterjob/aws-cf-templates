@@ -22,7 +22,7 @@ SUBNETB_CIDR=`aws ec2 describe-subnets --filters "Name=vpc-id,Values=${AWS_VPC_I
 SUBNETC_CIDR=`aws ec2 describe-subnets --filters "Name=vpc-id,Values=${AWS_VPC_ID}" | jq '.Subnets[] | select(.Tags[].Value == "subnet-c")' | jq '.CidrBlock'`
 
 #Create ansible inventory
-cat <<EOF > ~/inventory.yaml
+sudo su<<EOF > ~/inventory.yaml
 [OSEv3:children]
 masters
 nodes
@@ -58,7 +58,7 @@ openshift_cluster_monitoring_operator_install=${OKD_MONITORING}
 EOF
 
 #Create ansible inventory
-cat <<EOF > ~/vars.yaml
+sudo su<<EOF > ~/vars.yaml
 ---
 openshift_deployment_type: origin
 
