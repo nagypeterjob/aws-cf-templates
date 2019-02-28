@@ -2,21 +2,24 @@
 
 #set up AWS Credentials
 sudo su<<EOF
-rm -r ~/.aws && mkdir ~/.aws
+if [ -d ~/.aws ]; then
+    rm -r ~/.aws
+fi
+mkdir ~/.aws
 echo '[default]' > ~/.aws/credentials
 echo 'aws_access_key_id=${AWS_ACCESS_KEY_ID}' >> ~/.aws/credentials
 echo 'aws_secret_access_key=${AWS_SECRET_ACCESS_KEY}' >> ~/.aws/credentials
 echo '[default]' > ~/.aws/config
-echo 'region=${REGION}' >> ~/.aws/config
+echo 'region=${AWS_REGION}' >> ~/.aws/config
 echo 'output=json' >> ~/.aws/config
 EOF
 
-VPC_NAME=`sudo aws ec2 describe-vpcs --vpc-ids ${AWS_VPC_ID} | jq '.Vpcs[0].Tags[0].Value'`
-VPC_CIDR=`sudo aws ec2 describe-vpcs --vpc-ids ${AWS_VPC_ID} | jq '.Vpcs[0].CidrBlock'`
+VPC_CIDR=`aws ec2 describe-vpcs --vpc-ids ${AWS_VPC_ID} | jq '.Vpcs[].CidrBlock'`
+VPC_NAME=`aws ec2 describe-vpcs --vpc-ids ${AWS_VPC_ID} | jq '.Vpcs[].Tags[].Value'`
 
-SUBNETA_CIDR=`sudo aws ec2 describe-subnets --filters "Name=vpc-id,Values=${AWS_VPC_ID}" | jq '.Subnets[] | select(.Tags[].Value == "subnet-a")' | jq '.CidrBlock'`
-SUBNETB_CIDR=`sudo aws ec2 describe-subnets --filters "Name=vpc-id,Values=${AWS_VPC_ID}" | jq '.Subnets[] | select(.Tags[].Value == "subnet-b")' | jq '.CidrBlock'`
-SUBNETC_CIDR=`sudo aws ec2 describe-subnets --filters "Name=vpc-id,Values=${AWS_VPC_ID}" | jq '.Subnets[] | select(.Tags[].Value == "subnet-c")' | jq '.CidrBlock'`
+SUBNETA_CIDR=`aws ec2 describe-subnets --filters "Name=vpc-id,Values=${AWS_VPC_ID}" | jq '.Subnets[] | select(.Tags[].Value == "subnet-a")' | jq '.CidrBlock'`
+SUBNETB_CIDR=`aws ec2 describe-subnets --filters "Name=vpc-id,Values=${AWS_VPC_ID}" | jq '.Subnets[] | select(.Tags[].Value == "subnet-b")' | jq '.CidrBlock'`
+SUBNETC_CIDR=`aws ec2 describe-subnets --filters "Name=vpc-id,Values=${AWS_VPC_ID}" | jq '.Subnets[] | select(.Tags[].Value == "subnet-c")' | jq '.CidrBlock'`
 
 #Create ansible inventory
 cat <<EOF > ~/inventory.yaml
