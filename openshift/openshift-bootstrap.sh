@@ -77,13 +77,13 @@ openshift_aws_vpc:
   subnets:
     ${AWS_REGION}:
     - cidr: ${SUBNETC_CIDR}
-      az: "eu-central-1c"
+      az: ${AWS_REGION}c
     - cidr: ${SUBNETB_CIDR}
-      az: "eu-central-1b"
+      az: ${AWS_REGION}b
     - cidr: ${SUBNETA_CIDR}
-      az: "eu-central-1a"
+      az: ${AWS_REGION}a
 
-openshift_aws_vpc_name: ${AWS_VPC_ID}
+openshift_aws_vpc_name: ${VPC_NAME}
 
 openshift_aws_create_security_groups: true
 
