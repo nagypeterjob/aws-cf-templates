@@ -14,15 +14,18 @@ echo 'region=${AWS_REGION}' >> ~/.aws/config
 echo 'output=json' >> ~/.aws/config
 EOF
 
-VPC_CIDR=`aws ec2 describe-vpcs --vpc-ids ${AWS_VPC_ID} | jq '.Vpcs[].CidrBlock'`
-VPC_NAME=`aws ec2 describe-vpcs --vpc-ids ${AWS_VPC_ID} | jq '.Vpcs[].Tags[].Value'`
+VPC_CIDR=`sudo aws ec2 describe-vpcs --vpc-ids ${AWS_VPC_ID} | jq '.Vpcs[].CidrBlock'`
+VPC_NAME=`sudo aws ec2 describe-vpcs --vpc-ids ${AWS_VPC_ID} | jq '.Vpcs[].Tags[].Value'`
 
-SUBNETA_CIDR=`aws ec2 describe-subnets --filters "Name=vpc-id,Values=${AWS_VPC_ID}" | jq '.Subnets[] | select(.Tags[].Value == "subnet-a")' | jq '.CidrBlock'`
-SUBNETB_CIDR=`aws ec2 describe-subnets --filters "Name=vpc-id,Values=${AWS_VPC_ID}" | jq '.Subnets[] | select(.Tags[].Value == "subnet-b")' | jq '.CidrBlock'`
-SUBNETC_CIDR=`aws ec2 describe-subnets --filters "Name=vpc-id,Values=${AWS_VPC_ID}" | jq '.Subnets[] | select(.Tags[].Value == "subnet-c")' | jq '.CidrBlock'`
+SUBNETA_CIDR=`sudo aws ec2 describe-subnets --filters "Name=vpc-id,Values=${AWS_VPC_ID}" | jq '.Subnets[] | select(.Tags[].Value == "subnet-a")' | jq '.CidrBlock'`
+SUBNETB_CIDR=`sudo aws ec2 describe-subnets --filters "Name=vpc-id,Values=${AWS_VPC_ID}" | jq '.Subnets[] | select(.Tags[].Value == "subnet-b")' | jq '.CidrBlock'`
+SUBNETC_CIDR=`sudo aws ec2 describe-subnets --filters "Name=vpc-id,Values=${AWS_VPC_ID}" | jq '.Subnets[] | select(.Tags[].Value == "subnet-c")' | jq '.CidrBlock'`
+
+touch /home/ec2-user/inventory.yaml
+touch /home/ec2-user/vars.yaml
 
 #Create ansible inventory
-sudo su<<EOF > ~/inventory.yaml
+cat <<EOF > /home/ec2-user/inventory.yaml
 [OSEv3:children]
 masters
 nodes
@@ -58,7 +61,7 @@ openshift_cluster_monitoring_operator_install=${OKD_MONITORING}
 EOF
 
 #Create ansible inventory
-sudo su<<EOF > ~/vars.yaml
+cat <<EOF > /home/ec2-user/vars.yaml
 ---
 openshift_deployment_type: origin
 
