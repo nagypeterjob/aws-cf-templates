@@ -108,8 +108,28 @@ openshift_aws_s3_bucket_name: ${OKD_REGISTRY_BUCKET_NAME}
 openshift_aws_elb_cert_arn: ${AWS_MASTER_ELB_CERT_ARN}
 EOF
 
+sudo mkdir /root/locks
+
+cat <<EOF > /home/ec2-user/cluster-install.sh
+if [ ! -f /root/locks/stage1  ]; then
+    sudo ansible-playbook -i inventory.yaml openshift-ansible/playbooks/aws/openshift-cluster/prerequisites.yml -e @vars.yaml --key-file /root/${OKD_KEYPAIR}
+    sudo touch /root/locks/stage1 
+fi
+if [ ! -f /root/locks/stage2  ]; then
+    sudo ansible-playbook -i inventory.yaml openshift-ansible/playbooks/aws/openshift-cluster/build_ami.yml -e @vars.yaml --key-file /root/${OKD_KEYPAIR}
+    sudo touch /root/locks/stage2
+fi
+if [ ! -f /root/locks/stage3  ]; then
+    sudo ansible-playbook -i inventory.yaml openshift-ansible/playbooks/aws/openshift-cluster/provision_install.yml -e @vars.yaml --key-file /root/${OKD_KEYPAIR}
+    sudo touch /root/locks/stage3 
+fi
+EOF
+
+chmod +x /home/ec2-user/cluster-install.sh
+
 sudo su<<EOF
 cp -r /home/ec2-user/openshift-ansible ~/
 cp /home/ec2-user/inventory.yaml ~/
 cp /home/ec2-user/vars.yaml ~/
+cp /home/ec2-user/cluster-install.sh ~/
 EOF
