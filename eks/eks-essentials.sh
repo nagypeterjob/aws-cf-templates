@@ -1,4 +1,4 @@
-sudo yum install -y jq > /dev/null 2>&1 
+sudo yum install -y jq > /dev/null 2>&1
 
 function main() {
     while test $# -gt 0; do
@@ -6,18 +6,18 @@ function main() {
                 -h|--help)
                     echo "--max-nodes           [number]     number of autoscalable nodes"
                     echo "--cluster-name        [string]     name of the cluster"
-                    echo "--ingress-controller  [bool]       whether you want to install ingress controller"
-                    echo "--cluster-autoscaler  [bool]       whether you want to install cluster autoscaler"
-                    echo "--dashboard           [bool]       whether you want to install dashboard"
-                    echo "--logging             [bool]       whether you want to install logging (Fluentd)"
-                    echo "--monitoring          [bool]       whether you want to install monitoring (Prom/Graf)"
+                    echo "--ingress-controller               whether you want to install ingress controller"
+                    echo "--cluster-autoscaler               whether you want to install cluster autoscaler"
+                    echo "--dashboard                        whether you want to install dashboard"
+                    echo "--logging                          whether you want to install logging (Fluentd)"
+                    echo "--monitoring                       whether you want to install monitoring (Prom/Graf)"
                     exit 0;
                     ;;
                 --max-nodes)
                     shift
                     if [[ $1 -ge 0 ]]; then
                         MAX_NODES=$1
-                    else 
+                    else
                         echo "Please specify a positive number for max nodes."
                         exit 1;
                     fi
@@ -34,17 +34,11 @@ function main() {
                     shift
                     ;;
                  --ingress-controller)
-                    shift
-                    if [[ ! -z $1 ]]; then
-                      WANT_INGRESS=$1
-                    fi
+                    WANT_INGRESS=true
                     shift
                     ;;
                  --cluster-autoscaler)
-                    shift
-                    if [[ ! -z $1 ]]; then
-                      WANT_AUTOSCALER=$1
-                    fi
+                    WANT_AUTOSCALER=true
                     shift
                     ;;
                 *)
@@ -70,7 +64,7 @@ fi
 EC2_AVAIL_ZONE=`curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone`
 AWS_REGION="`echo \"$EC2_AVAIL_ZONE\" | sed 's/[a-z]$//'`"
 
-if [[ $WANT_INGRESS == true ]]; then 
+if [[ $WANT_INGRESS == true ]]; then
     echo "-------------------------------------------------"
     echo "---Deploying module #1: ALB-Ingress-Controller---"
     echo "-------------------------------------------------"
@@ -82,7 +76,7 @@ else
     echo "------------------------------------------------"
 fi;
 
-if [[ $WANT_AUTOSCALER == true ]]; then 
+if [[ $WANT_AUTOSCALER == true ]]; then
     echo "-------------------------------------------------"
     echo "-----Deploying module #2: Cluster Autoscaler-----"
     echo "-------------------------------------------------"
